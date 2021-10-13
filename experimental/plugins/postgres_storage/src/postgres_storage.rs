@@ -213,6 +213,47 @@ const _CREATE_SCHEMA_MULTI: [&str; 14] = [
     "CREATE INDEX IF NOT EXISTS ix_tags_plaintext_value ON tags_plaintext(wallet_id, value)",
     "CREATE INDEX IF NOT EXISTS ix_tags_plaintext_wallet_id_item_id ON tags_plaintext(wallet_id, item_id)"
 ];
+const _CREATE_SCHEMA_MULTIWALLET_MULTITABLES: [&str; 12] = [
+    "CREATE TABLE IF NOT EXISTS metadata_$1 (
+        id BIGSERIAL PRIMARY KEY,
+        value BYTEA NOT NULL
+    )",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_metadata_values ON metadata_$1(value)",
+    "CREATE TABLE IF NOT EXISTS items_$1(
+        id BIGSERIAL PRIMARY KEY,
+        type BYTEA NOT NULL,
+        name BYTEA NOT NULL,
+        value BYTEA NOT NULL,
+        key BYTEA NOT NULL
+    )",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_items_type_name ON items_$1(type, name)",
+    "CREATE TABLE IF NOT EXISTS tags_encrypted_$1(
+        name BYTEA NOT NULL,
+        value BYTEA NOT NULL,
+        item_id BIGINT NOT NULL,
+        PRIMARY KEY(name, item_id),
+        FOREIGN KEY(item_id)
+            REFERENCES items_$1(id)
+            ON DELETE CASCADE
+            ON UPDATE CASCADE
+    )",
+    "CREATE INDEX IF NOT EXISTS ix_tags_encrypted_name ON tags_encrypted_$1(name)",
+    "CREATE INDEX IF NOT EXISTS ix_tags_encrypted_value ON tags_encrypted_$1(md5(value))",
+    "CREATE INDEX IF NOT EXISTS ix_tags_encrypted_item_id ON tags_encrypted_$1(item_id)",
+    "CREATE TABLE IF NOT EXISTS tags_plaintext_$1(
+        name BYTEA NOT NULL,
+        value TEXT NOT NULL,
+        item_id BIGINT NOT NULL,
+        PRIMARY KEY(name, item_id),
+        FOREIGN KEY(item_id)
+            REFERENCES items_$1(id)
+            ON DELETE CASCADE
+            ON UPDATE CASCADE
+    )",
+    "CREATE INDEX IF NOT EXISTS ix_tags_plaintext_name ON tags_plaintext_$1(name)",
+    "CREATE INDEX IF NOT EXISTS ix_tags_plaintext_value ON tags_plaintext_$1(value)",
+    "CREATE INDEX IF NOT EXISTS ix_tags_plaintext_item_id ON tags_plaintext_$1(item_id)"
+];
 const _DROP_WALLET_DATABASE: &str = "DROP DATABASE \"$1\"";
 const _DROP_SCHEMA: [&str; 4] = [
     "DROP TABLE tags_plaintext",
@@ -1007,15 +1048,85 @@ impl WalletStrategy for MultiWalletMultiTableStrategy {
     // initialize storage based on wallet storage strategy
     fn init_storage(&self, _config: &PostgresConfig, _credentials: &PostgresCredentials) -> Result<(), WalletStorageError> {
         // create database for storage
-        // TODO
+        // if admin user and password aren't provided then bail
+        if credentials.admin_account == None || credentials.admin_password == None {
+            return Ok(());
+        }
+
+        let url_base = PostgresStorageType::_admin_postgres_url(&config, &credentials);
+        let url = PostgresStorageType::_postgres_url(_WALLETS_DB, &config, &credentials);
+
+        let conn = postgres::Connection::connect(&url_base[..], postgres::TlsMode::None)?;
+
+        if let Err(error) = conn.execute(&_CREATE_WALLETS_DATABASE, &[]) {
+            if error.code() != Some(&postgres::error::DUPLICATE_DATABASE) {
+                conn.finish()?;
+                return Err(WalletStorageError::IOError(format!("Error occurred while creating the database: {}", error)));
+            } else {
+                // if database already exists, assume tables are created already and return
+                conn.finish()?;
+                return Ok(());
+            }
+        }
+        conn.finish()?;
+
+        let conn = match postgres::Connection::connect(&url[..], postgres::TlsMode::None) {
+            Ok(conn) => conn,
+            Err(error) => {
+                return Err(WalletStorageError::IOError(format!("Error occurred while connecting to wallet schema: {}", error)));
+            }
+        };
+
+        for sql in &_CREATE_SCHEMA {
+            if let Err(error) = conn.execute(sql, &[]) {
+                conn.finish()?;
+                return Err(WalletStorageError::IOError(format!("Error occurred while creating wallet schema: {}", error)));
+            }
+        }
+        conn.finish()?;
+
         Ok(())
     }
+
     // initialize a single wallet based on wallet storage strategy
     fn create_wallet(&self, _id: &str, _config: &PostgresConfig, _credentials: &PostgresCredentials, _metadata: &[u8]) -> Result<(), WalletStorageError> {
         // create tables for wallet storage
-        // TODO
+        debug!("Initializing storage strategy MultiWalletSingleTableStrategy.");
+        if credentials.admin_account == None || credentials.admin_password == None {
+            return Ok(());
+        }
+
+        debug!("setting up the admin_postgres_url");
+        // look to see if there is a specified db to use.  If not, use the default name
+        let wallet_db_name: &str = get_multi_database_name(config);
+        debug!("wallet_db_name: {:?}", wallet_db_name);
+        let url_base = PostgresStorageType::_admin_postgres_url(&config, &credentials);
+        let url = PostgresStorageType::_postgres_url(wallet_db_name, &config, &credentials);
+        debug!("postgres_url: {:?}", url);
+        debug!("connecting to postgres, url_base: {:?}", url_base);
+
+        debug!("connecting to wallet storage");
+        let conn = match postgres::Connection::connect(&url[..], config.tls()) {
+            Ok(conn) => conn,
+            Err(error) => {
+                debug!("error connecting to wallet storage, Error: {}", error);
+                return Err(WalletStorageError::IOError(format!("Error occurred while connecting to wallet schema: {}", error)));
+            }
+        };
+
+        debug!("setting up multi schema");       
+        for sql in &_CREATE_SCHEMA_MULTIWALLET_MULTITABLES {
+            let db_sql = str::replace(sql, "$1", id);
+            if let Err(error) = conn.execute(db_sql, &[]) {
+                debug!("error creating wallet schema, Error: {}", error);
+                conn.finish()?;
+                return Err(WalletStorageError::IOError(format!("Error occurred while creating wallet schema: {}", error)));
+            }
+        }
+        conn.finish()?;
         Ok(())
     }
+
     // open a wallet based on wallet storage strategy
     fn open_wallet(&self, _id: &str, _config: &PostgresConfig, _credentials: &PostgresCredentials) -> Result<Box<PostgresStorage>, WalletStorageError> {
         // TODO
