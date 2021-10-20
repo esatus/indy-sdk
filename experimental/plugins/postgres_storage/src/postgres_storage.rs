@@ -1071,12 +1071,12 @@ impl WalletStrategy for MultiWalletMultiTableStrategy {
     fn init_storage(&self, _config: &PostgresConfig, _credentials: &PostgresCredentials) -> Result<(), WalletStorageError> {
         // create database for storage
         // if admin user and password aren't provided then bail
-        if credentials.admin_account == None || credentials.admin_password == None {
+        if _credentials.admin_account == None || _credentials.admin_password == None {
             return Ok(());
         }
 
-        let url_base = PostgresStorageType::_admin_postgres_url(&config, &credentials);
-        let url = PostgresStorageType::_postgres_url(_WALLETS_DB, &config, &credentials);
+        let url_base = PostgresStorageType::_admin_postgres_url(&_config, &_credentials);
+        let url = PostgresStorageType::_postgres_url(_WALLETS_DB, &_config, &_credentials);
 
         let conn = postgres::Connection::connect(&url_base[..], postgres::TlsMode::None)?;
 
@@ -1113,21 +1113,21 @@ impl WalletStrategy for MultiWalletMultiTableStrategy {
     fn create_wallet(&self, _id: &str, _config: &PostgresConfig, _credentials: &PostgresCredentials, _metadata: &[u8]) -> Result<(), WalletStorageError> {
         // create tables for wallet storage
         debug!("Initializing storage strategy MultiWalletSingleTableStrategy.");
-        if credentials.admin_account == None || credentials.admin_password == None {
+        if _credentials.admin_account == None || _credentials.admin_password == None {
             return Ok(());
         }
 
         debug!("setting up the admin_postgres_url");
         // look to see if there is a specified db to use.  If not, use the default name
-        let wallet_db_name: &str = get_multi_database_name(config);
+        let wallet_db_name: &str = get_multi_database_name(_config);
         debug!("wallet_db_name: {:?}", wallet_db_name);
-        let url_base = PostgresStorageType::_admin_postgres_url(&config, &credentials);
-        let url = PostgresStorageType::_postgres_url(wallet_db_name, &config, &credentials);
+        let url_base = PostgresStorageType::_admin_postgres_url(&_config, &_credentials);
+        let url = PostgresStorageType::_postgres_url(wallet_db_name, &_config, &_credentials);
         debug!("postgres_url: {:?}", url);
         debug!("connecting to postgres, url_base: {:?}", url_base);
 
         debug!("connecting to wallet storage");
-        let conn = match postgres::Connection::connect(&url[..], config.tls()) {
+        let conn = match postgres::Connection::connect(&url[..], _config.tls()) {
             Ok(conn) => conn,
             Err(error) => {
                 debug!("error connecting to wallet storage, Error: {}", error);
@@ -1137,8 +1137,8 @@ impl WalletStrategy for MultiWalletMultiTableStrategy {
 
         debug!("setting up multi schema");       
         for sql in &_CREATE_SCHEMA_MULTIWALLET_MULTITABLES {
-            let db_sql = str::replace(sql, "$1", id);
-            if let Err(error) = conn.execute(db_sql, &[]) {
+            let db_sql = str::replace(sql, "$1", _id);
+            if let Err(error) = conn.execute(&db_sql, &[]) {
                 debug!("error creating wallet schema, Error: {}", error);
                 conn.finish()?;
                 return Err(WalletStorageError::IOError(format!("Error occurred while creating wallet schema: {}", error)));
@@ -1151,13 +1151,13 @@ impl WalletStrategy for MultiWalletMultiTableStrategy {
     // open a wallet based on wallet storage strategy
     fn open_wallet(&self, _id: &str, _config: &PostgresConfig, _credentials: &PostgresCredentials) -> Result<Box<PostgresStorage>, WalletStorageError> {
         // look to see if there is a specified db to use.  If not, use the default name
-        let wallet_db_name: &str = get_multi_database_name(config);
+        let wallet_db_name: &str = get_multi_database_name(_config);
         debug!("wallet_db_name: {:?}", wallet_db_name);
 
-        let url = PostgresStorageType::_postgres_url(wallet_db_name, &config, &credentials);
+        let url = PostgresStorageType::_postgres_url(wallet_db_name, &_config, &_credentials);
 
         // don't need a connection, but connect just to verify we can
-        let conn = match postgres::Connection::connect(&url[..], config.tls()) {
+        let conn = match postgres::Connection::connect(&url[..], _config.tls()) {
             Ok(conn) => conn,
             Err(_) => return Err(WalletStorageError::NotFound)
         };
@@ -1166,7 +1166,7 @@ impl WalletStrategy for MultiWalletMultiTableStrategy {
         let res: Result<Vec<u8>, WalletStorageError> = {
             let mut rows = conn.query(
                 "SELECT value FROM metadata_$1",
-                &[&id]);
+                &[&_id]);
             match rows.as_mut().unwrap().iter().next() {
                 Some(row) => Ok(row.get(0)),
                 None => Err(WalletStorageError::ItemNotFound)
@@ -1180,14 +1180,14 @@ impl WalletStrategy for MultiWalletMultiTableStrategy {
 
         // TODO close conn
 
-        let manager = match PostgresConnectionManager::new(&url[..], config.r2d2_tls()) {
+        let manager = match PostgresConnectionManager::new(&url[..], _config.r2d2_tls()) {
             Ok(manager) => manager,
             Err(_) => return Err(WalletStorageError::NotFound)
         };
         let pool = match r2d2::Pool::builder()
-            .min_idle(Some(config.min_idle_count()))
-            .max_size(config.max_connections())
-            .idle_timeout(Some(Duration::new(config.connection_timeout(), 0)))
+            .min_idle(Some(_config.min_idle_count()))
+            .max_size(_config.max_connections())
+            .idle_timeout(Some(Duration::new(_config.connection_timeout(), 0)))
             .build(manager) {
             Ok(pool) => pool,
             Err(_) => return Err(WalletStorageError::NotFound)
@@ -1195,17 +1195,17 @@ impl WalletStrategy for MultiWalletMultiTableStrategy {
 
         Ok(Box::new(PostgresStorage {
             pool: pool,
-            wallet_id: id.to_string(),
+            wallet_id: _id.to_string(),
         }))
     }
     // delete a single wallet based on wallet storage strategy
     fn delete_wallet(&self, _id: &str, _config: &PostgresConfig, _credentials: &PostgresCredentials) -> Result<(), WalletStorageError> {
         // look to see if there is a specified db to use.  If not, use the default name
-        let wallet_db_name: &str = get_multi_database_name(config);
+        let wallet_db_name: &str = get_multi_database_name(_config);
         debug!("wallet_db_name: {:?}", wallet_db_name);
-        let url = PostgresStorageType::_postgres_url(wallet_db_name, &config, &credentials);
+        let url = PostgresStorageType::_postgres_url(wallet_db_name, &_config, &_credentials);
 
-        let conn = match postgres::Connection::connect(&url[..], config.tls()) {
+        let conn = match postgres::Connection::connect(&url[..], _config.tls()) {
             Ok(conn) => conn,
             Err(error) => {
                 return Err(WalletStorageError::IOError(format!("Error occurred while connecting to wallet schema: {}", error)));
@@ -1214,7 +1214,7 @@ impl WalletStrategy for MultiWalletMultiTableStrategy {
 
         let mut ret = Ok(());
         for sql in &_DELETE_WALLET_MULTIWALLET_MULTITABLES {
-            ret = match conn.execute(sql, &[&id]) {
+            ret = match conn.execute(sql, &[&_id]) {
                 Ok(row_count) => {
                     if row_count == 0 {
                         Err(WalletStorageError::NotFound)
@@ -1233,13 +1233,14 @@ impl WalletStrategy for MultiWalletMultiTableStrategy {
     // determine phyisical table name based on wallet strategy
     fn table_name(&self, _id: &str, base_name: &str) -> String {
         // TODO
-        let name = base_name + "_" + _id;
-        name.to_owned();
+        // let name = base_name + "_" + _id;
+        let name = format!("{}{}{}", base_name, "_", _id);
+        name.to_owned()
     }
     // determine additional query parameters based on wallet strategy
     fn query_qualifier(&self) -> Option<String> {
         // TODO
-        None;
+        None
     }
     // Returns the strategy enum
     fn strategy(&self) -> WalletScheme {
