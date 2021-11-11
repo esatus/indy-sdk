@@ -573,7 +573,9 @@ struct DatabasePerWalletStrategy {}
 
 struct MultiWalletSingleTableStrategy {}
 
-struct MultiWalletMultiTableStrategy {}
+struct MultiWalletMultiTableStrategy {
+    pool: r2d2::Pool<PostgresConnectionManager>
+}
 
 struct MultiWalletSingleTableStrategySharedPool {
     pool: r2d2::Pool<PostgresConnectionManager>
@@ -2202,7 +2204,10 @@ impl WalletStorageType for PostgresStorageType {
                 }
                 WalletScheme::MultiWalletMultiTable => {
                     debug!("Initialising postgresql using MultiWalletMultiTable strategy.");
-                    set_wallet_strategy(Box::new(MultiWalletMultiTableStrategy {}));
+			
+		    let pool = create_connection_pool(&config, &credentials)?;
+			
+                    set_wallet_strategy(Box::new(MultiWalletMultiTableStrategy { pool }));
                 }
                 WalletScheme::MultiWalletSingleTableSharedPool => {
                     if (&config as &PostgresConfig).min_idle_count() > 0 {
