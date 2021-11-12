@@ -573,9 +573,7 @@ struct DatabasePerWalletStrategy {}
 
 struct MultiWalletSingleTableStrategy {}
 
-struct MultiWalletMultiTableStrategy {
-    pool: r2d2::Pool<PostgresConnectionManager>
-}
+struct MultiWalletMultiTableStrategy {}
 
 struct MultiWalletSingleTableStrategySharedPool {
     pool: r2d2::Pool<PostgresConnectionManager>
@@ -1202,12 +1200,9 @@ impl WalletStrategy for MultiWalletMultiTableStrategy {
         debug!("wallet_db_name: {:?}", wallet_db_name);
         let url = PostgresStorageType::_postgres_url(wallet_db_name, &config, &credentials);
         // don't need a connection, but connect just to verify we can
-        let conn = match self.pool.get() {
+        let conn = match postgres::Connection::connect(&url[..], config.tls()) {
             Ok(conn) => conn,
-            Err(error) => {
-                error!("Error retrieving connection from connection pool. {:?}", error);
-                return Err(WalletStorageError::NotFound)
-            }
+            Err(_) => return Err(WalletStorageError::NotFound)
         };
         // select metadata for this wallet to ensure it exists
         let select_value_from_metadata_sql = str::replace("SELECT value FROM \"metadata_$1\"", "$1", id);
@@ -1231,7 +1226,7 @@ impl WalletStrategy for MultiWalletMultiTableStrategy {
             Ok(pool) => pool,
             Err(_) => return Err(WalletStorageError::NotFound)
         };
-        Ok(Box::new(PostgresStorage {pool: self.pool.clone(), wallet_id: id.to_string()}))
+        Ok(Box::new(PostgresStorage {pool: pool, wallet_id: id.to_string()}))
     }
     // delete a single wallet based on wallet storage strategy
     fn delete_wallet( &self, id: &str, config: &PostgresConfig, credentials: &PostgresCredentials, ) -> Result<(), WalletStorageError> {
@@ -2207,10 +2202,7 @@ impl WalletStorageType for PostgresStorageType {
                 }
                 WalletScheme::MultiWalletMultiTable => {
                     debug!("Initialising postgresql using MultiWalletMultiTable strategy.");
-			
-					let pool = create_connection_pool(&config, &credentials)?;
-			
-                    set_wallet_strategy(Box::new(MultiWalletMultiTableStrategy { pool }));
+                    set_wallet_strategy(Box::new(MultiWalletMultiTableStrategy {}));
                 }
                 WalletScheme::MultiWalletSingleTableSharedPool => {
                     if (&config as &PostgresConfig).min_idle_count() > 0 {
