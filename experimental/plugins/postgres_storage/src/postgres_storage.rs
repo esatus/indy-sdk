@@ -310,8 +310,8 @@ const _CREATE_SCHEMA_MULTI_TABLE_MWMT: [&str; 14] = [
     "CREATE INDEX \"ix_tags_plaintext_value_$1\" ON \"tags_plaintext_$1\"(value)",
     "CREATE INDEX \"ix_tags_plaintext_wallet_id_item_id_$1\" ON \"tags_plaintext_$1\"(item_id)",
 
-    "CREATE INDEX \"items_idxonly_$1\" ON \"items_$1\" USING btree (id, type, name, value, key)",
-    "CREATE INDEX \"tags_encrypted_idxonly_$1\" ON \"tags_encrypted_$1\" USING btree (name, value, item_id)"
+    // "CREATE INDEX \"items_idxonly_$1\" ON \"items_$1\" USING btree (id, type, name, value, key)",
+    // "CREATE INDEX \"tags_encrypted_idxonly_$1\" ON \"tags_encrypted_$1\" USING btree (name, value, item_id)"
 ];
 const _DELETE_WALLET_TABLES: [&str; 4] = [
     "DROP TABLE \"metadata_$1\" CASCADE",
