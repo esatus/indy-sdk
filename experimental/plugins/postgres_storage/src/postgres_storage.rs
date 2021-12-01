@@ -269,7 +269,7 @@ const _CREATE_SCHEMA_MULTI_TABLE: [&str; 12] = [
     "CREATE INDEX \"ix_tags_plaintext_value_$1\" ON \"tags_plaintext_$1\"(value)",
     "CREATE INDEX \"ix_tags_plaintext_wallet_id_item_id_$1\" ON \"tags_plaintext_$1\"(item_id)"
 ];
-const _CREATE_SCHEMA_MULTI_TABLE_MWMT: [&str; 14] = [
+const _CREATE_SCHEMA_MULTI_TABLE_MWMT: [&str; 12] = [
     "CREATE TABLE \"metadata_$1\" (
         id BIGSERIAL PRIMARY KEY,
         value BYTEA NOT NULL
