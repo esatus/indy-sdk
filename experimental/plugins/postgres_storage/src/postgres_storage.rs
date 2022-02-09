@@ -1634,7 +1634,7 @@ impl WalletStorage for PostgresStorage {
                     let sql_replaced = str::replace("SELECT name, value FROM \"tags_encrypted_$2\" WHERE item_id = $1", "$2", &self.wallet_id);
                     conn.query(&sql_replaced, &[&item.0])?
                 },
-                WalletScheme::MultiWalletSingleTable | WalletScheme::MultiWalletSingleTableSharedPool => conn.query("SELECT name, value FROM \"tags_encrypted WHERE item_id = $1 AND wallet_id = $2", &[&item.0, &self.wallet_id])?,
+                WalletScheme::MultiWalletSingleTable | WalletScheme::MultiWalletSingleTableSharedPool => conn.query("SELECT name, value FROM tags_encrypted WHERE item_id = $1 AND wallet_id = $2", &[&item.0, &self.wallet_id])?,
                 WalletScheme::DatabasePerWallet => conn.query("SELECT name, value FROM \"tags_encrypted\" WHERE item_id = $1", &[&item.0])?
             };
 
@@ -2219,7 +2219,7 @@ impl WalletStorage for PostgresStorage {
             WalletScheme::MultiWalletMultiTable | WalletScheme::MultiWalletSplitDatabaseMultiTable => 
                 Some(TagRetrieverMultiTableMultiWallet::new_owned(Rc::new(pool.get().unwrap()).clone(), Some(self.wallet_id.clone()))?),
             WalletScheme::MultiWalletSingleTable | WalletScheme::MultiWalletSingleTableSharedPool => 
-                Some(TagRetriever::new_owned(Rc::new(pool.get().unwrap()).clone(), Some(self.wallet_id.clone()))?),
+                Some(TagRetriever::new_owned(Rc::new(pool.get().unwrap()).clone(), None)?),
             WalletScheme::DatabasePerWallet => Some(TagRetriever::new_owned(Rc::new(pool.get().unwrap()).clone(), None)?)
         };
 
